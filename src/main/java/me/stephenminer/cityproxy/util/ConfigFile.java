@@ -7,20 +7,33 @@ import net.md_5.bungee.config.YamlConfiguration;
 
 import java.io.File;
 import java.io.IOException;
+import java.io.InputStream;
+import java.nio.file.Files;
 
-public final class StorageFile {
+public final class ConfigFile {
     public final ConfigurationProvider provider;
     public Configuration config;
     public final File file;
 
-    public StorageFile(CityProxy proxy, String name){
+    public ConfigFile(CityProxy proxy, String name) {
+        this(proxy, name, false);
+    }
+
+    public ConfigFile(CityProxy proxy, String name, boolean loadDefault) {
         provider = ConfigurationProvider.getProvider(YamlConfiguration.class);
         file = new File(proxy.getDataFolder(), name);
-        if (!file.exists())
-            file.mkdirs();
         try {
+            if (!file.exists()) {
+                Files.createDirectories(proxy.getDataFolder().toPath());
+                if (loadDefault) {
+                    try (InputStream stream = proxy.getResourceAsStream(name)) {
+                        Files.copy(stream, file.toPath());
+                    }
+                }else file.createNewFile();
+            }
             config = provider.load(file);
-        }catch (IOException e){
+
+        } catch (IOException e) {
             e.printStackTrace();
         }
     }

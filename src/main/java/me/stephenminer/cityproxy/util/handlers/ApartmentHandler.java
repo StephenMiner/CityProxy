@@ -1,4 +1,4 @@
-package me.stephenminer.cityproxy.util;
+package me.stephenminer.cityproxy.util.handlers;
 
 import com.google.common.io.ByteArrayDataOutput;
 import com.google.common.io.ByteStreams;
@@ -12,9 +12,9 @@ import java.util.*;
 /**
  * Handles sending data to and from the proxy and a server
  */
-public class DataHandler {
+public class ApartmentHandler {
     private final CityProxy plugin;
-    public DataHandler(){
+    public ApartmentHandler(){
         this.plugin = CityProxy.getInstance();
     }
 

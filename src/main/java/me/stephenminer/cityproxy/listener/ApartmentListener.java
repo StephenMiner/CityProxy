@@ -8,7 +8,7 @@ import me.stephenminer.cityproxy.records.BuildingRecord;
 import me.stephenminer.cityproxy.records.PlayerRecord;
 import me.stephenminer.cityproxy.records.RoomRecord;
 import me.stephenminer.cityproxy.util.ConfigFile;
-import me.stephenminer.cityproxy.util.DataHandler;
+import me.stephenminer.cityproxy.util.handlers.ApartmentHandler;
 import net.md_5.bungee.api.ChatColor;
 import net.md_5.bungee.api.chat.BaseComponent;
 import net.md_5.bungee.api.chat.ComponentBuilder;
@@ -23,13 +23,16 @@ import net.md_5.bungee.event.EventHandler;
 import java.util.*;
 import java.util.concurrent.TimeUnit;
 
-public class MessageListener implements Listener {
+/**
+ * Contains the listeners relating to the Apartment functions
+ */
+public class ApartmentListener implements Listener {
     private final CityProxy plugin;
     private final Set<String> sentServers;
 
 
 
-    public MessageListener(){
+    public ApartmentListener(){
         this.plugin = CityProxy.getInstance();
         sentServers = new HashSet<>();
     }
@@ -48,13 +51,15 @@ public class MessageListener implements Listener {
 
         if (!sentServers.contains(name) && plugin.buildingServerNames.contains(name)) {
             sentServers.add(name);
-            DataHandler sender = new DataHandler();
+            ApartmentHandler sender = new ApartmentHandler();
             server.sendData("city:info", sender.getServerBuildingData(name));
             //This else case is needed so that if the owner disables a server, but not this proxy, the building data can still be sent on that server's restart
         }else sendBuildingsInfoPing(server);
         if (!hasRecord(player)){
             PlayerRecord record = new PlayerRecord(player.getName(),player.getUniqueId());
-            plugin.hasPlayed.add(record);
+            //log player record
+            plugin.records.put(record.uuid(),record);
+            //assign starter room
             RoomRecord foundRoom = findAvailableRoom();
             if (foundRoom == null){
                 player.sendMessage(new ComponentBuilder().append("Server Network has run out of default rooms! Could not give you one!").color(ChatColor.YELLOW).build());
@@ -72,7 +77,7 @@ public class MessageListener implements Listener {
                 if (!player.getServer().getInfo().equals(serverInfo))
                     player.connect(serverInfo);
                 plugin.getProxy().getScheduler().schedule(plugin,()->{
-                    DataHandler handler = new DataHandler();
+                    ApartmentHandler handler = new ApartmentHandler();
                     serverInfo.sendData("city:info", handler.getOwnerChange(host.name(),ownedRoom.name(),ownedRoom.owner(), true), true);
                 },1, TimeUnit.SECONDS);
                 BaseComponent component = new ComponentBuilder("You are being assigned to a room currently! Once assigned, you will be teletported").color(ChatColor.GREEN).build();
@@ -82,8 +87,8 @@ public class MessageListener implements Listener {
             //This object is not null
             PlayerRecord record = findRecord(player);
             if (!player.getName().equalsIgnoreCase(record.name())) {
-                plugin.hasPlayed.remove(record);
-                plugin.hasPlayed.add(new PlayerRecord(player.getName(), player.getUniqueId()));
+                plugin.records.remove(record.uuid());
+                plugin.records.put(player.getUniqueId(),new PlayerRecord(player.getName(), player.getUniqueId()));
             }
         }
     }
@@ -94,10 +99,7 @@ public class MessageListener implements Listener {
     }
 
     private PlayerRecord findRecord(ProxiedPlayer player){
-        for (PlayerRecord record : plugin.hasPlayed){
-            if (record.uuid().equals(player.getUniqueId())) return record;
-        }
-        return null;
+        return plugin.records.getOrDefault(player.getUniqueId(),null);
     }
 
     /**
@@ -152,7 +154,7 @@ public class MessageListener implements Listener {
      */
     private void handleBuildingUpdate(ByteArrayDataInput reader){
         String buildingData = reader.readUTF();
-        DataHandler handler = new DataHandler();
+        ApartmentHandler handler = new ApartmentHandler();
         BuildingRecord building = handler.parseDataMsg(buildingData);
         plugin.buildings.put(building.name(),building);
         plugin.getLogger().info("Recieved building update change!");
@@ -167,7 +169,7 @@ public class MessageListener implements Listener {
      */
     private void handleRoomUpdate(ByteArrayDataInput reader){
         String roomData = reader.readUTF();
-        DataHandler handler = new DataHandler();
+        ApartmentHandler handler = new ApartmentHandler();
         RoomRecord room = handler.loadRoom(roomData);
         plugin.rooms.put(room.name(),room);
         plugin.getLogger().info("Recieved room update change!");
@@ -256,7 +258,7 @@ public class MessageListener implements Listener {
         String name = reader.readUTF();
         ServerInfo server = plugin.getProxy().getServerInfo(name);
         if (server != null) {
-            DataHandler handler = new DataHandler();
+            ApartmentHandler handler = new ApartmentHandler();
             byte[] buildingData = handler.getServerBuildingData(name);
             server.sendData("city:info",buildingData, true);
             plugin.getLogger().info("Sending server building data for " + name + " upon it's request.");
@@ -276,7 +278,7 @@ public class MessageListener implements Listener {
         String old = reader.readUTF();
         String name = reader.readUTF();
         ProxiedPlayer player = plugin.getProxy().getPlayer(sender);
-        DataHandler handler = new DataHandler();
+        ApartmentHandler handler = new ApartmentHandler();
         if (plugin.buildings.containsKey(name)){
             if (player != null && player.isConnected()){
                 BaseComponent msg = new ComponentBuilder(name + " is already taken! Cannot rename building to this").color(ChatColor.YELLOW).build();
@@ -298,6 +300,10 @@ public class MessageListener implements Listener {
         }
     }
 
+    /**
+     * Handles Room Name Changes, sending the change confirmation or denial to the server that initially sent the data
+     * @param reader
+     */
     public void handleRoomNameChange(ByteArrayDataInput reader){
         UUID uuid = UUID.fromString(reader.readUTF());
         String bName = reader.readUTF();
@@ -305,7 +311,7 @@ public class MessageListener implements Listener {
         String newName = reader.readUTF();
         ProxiedPlayer player = plugin.getProxy().getPlayer(uuid);
         boolean canSend = player != null && player.isConnected();
-        DataHandler handler = new DataHandler();
+        ApartmentHandler handler = new ApartmentHandler();
         if (!plugin.buildings.containsKey(bName)){
             if (canSend){
                 BaseComponent msg = new ComponentBuilder("Couldn't find building " + bName).color(ChatColor.RED).build();
@@ -337,6 +343,11 @@ public class MessageListener implements Listener {
         }
     }
 
+    /**
+     * Deletes records of the building read from data sent from a bukkit server
+     * Updates the storage file
+     * @param reader
+     */
     public void handleBuildingDeletion(ByteArrayDataInput reader){
         String bName = reader.readUTF();
         BuildingRecord building = plugin.buildings.remove(bName);
@@ -348,6 +359,11 @@ public class MessageListener implements Listener {
         plugin.getLogger().info("Deleted building " + bName);
     }
 
+    /**
+     * Deletes a RoomRecord and removes its association from its BuildingRecord
+     * updates the storage file
+     * @param reader
+     */
     public void handleRoomDeletion(ByteArrayDataInput reader){
         String bName = reader.readUTF();
         String roomName = reader.readUTF();

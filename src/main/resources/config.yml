@@ -1,0 +1,7 @@
+default-size: 8x8
+starting-bal: 400
+day-period: 600
+transfer-limit: 4000
+request-limit: 4000
+daily-transfers: 5
+daily-requests: 5

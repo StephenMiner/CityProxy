@@ -1,3 +1,4 @@
 name: CityProxy
 version: '${project.version}'
+author: StephenminerMeep
 main: me.stephenminer.cityproxy.CityProxy
