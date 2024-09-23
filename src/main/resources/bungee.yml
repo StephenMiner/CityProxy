@@ -1,0 +1,3 @@
+name: CityProxy
+version: '${project.version}'
+main: me.stephenminer.cityproxy.CityProxy
